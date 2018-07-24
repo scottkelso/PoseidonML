@@ -1,2 +1,13 @@
 {
+        "AmazonEcho": "AmazonEcho",
+        "AuraSmartSleepSensor": "AuraSmartSleepSensor",
+        "Dropcam": "Dropcam",
+        "InsteonCamera": "InsteonCamera",
+	"NESTProtectSmokeAlarm": "NESTProtectSmokeAlarm",
+	"SamsungGalaxyTab": "SamsungGalaxyTab",
+	"SamsungSmartCam": "SamsungSmartCam",
+	"SmartBabyMonitor": "SmartBabyMonitor",
+	"TPLinkRouterBridgeLAN": "TPLinkRouterBridgeLAN",
+	"TribySpeaker": "TribySpeaker",
+	"WithingsSmartScale": "WithingsSmartScale"
 }

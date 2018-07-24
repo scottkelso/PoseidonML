@@ -1,31 +1,31 @@
 {
     "labels":
     [
-        "Administrator workstation",
-        "Business workstation",
-        "GPU laptop",
-        "VPN client",
-        "PKI server",
-        "Admin server",
-        "Developer workstation",
-        "Smartphone",
-        "Printer",
-        "Mail server",
-        "File server",
-        "Internal web server",
-        "Database server",
-        "Code repository",
-        "DNS server",
-        "DHCP server",
-        "Active Directory controller",
-        "SSH server",
-        "VOIP phone",
-        "PBX",
-        "Unknown"
+        "AmazonEcho",
+        "AuraSmartSleepSensor",
+        "Dropcam",
+        "InsteonCamera",
+	"NESTProtectSmokeAlarm",
+	"SamsungGalaxyTab",
+	"SamsungSmartCam",
+	"SmartBabyMonitor",
+	"TPLinkRouterBridgeLAN",
+	"TribySpeaker",
+	"WithingsSmartScale",
+	"Twelve",
+	"Thirteen",
+	"Fourteen",
+	"Fifteen",
+	"Sixteen",
+	"Seventeen",
+	"Eighteen",
+	"Nineteen",
+	"Twenty",
+	"Unknown"
     ],
 
     "source identifier": "MAC",
-    "session threshold": 120,
+    "session threshold": 60,
     "max port": 1024,
 
     "state size": 32,
@@ -34,6 +34,6 @@
     "time constant": 86400,
     "threshold": 0.99,
 
-    "rnn size": 100,
+    "rnn size": 128,
     "batch size": 32
 }
