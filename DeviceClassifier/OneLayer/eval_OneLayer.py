@@ -462,6 +462,14 @@ if __name__ == '__main__':
             # Get json message
             message = json.dumps(decision)
 
+            fileDir = "/tmp/poseidon/deviceList.txt"
+            try:
+                file = open(fileDir, 'r')
+            except IOError:
+                file = open(fileDir, 'w')
+
+            file.write(labels[1] + ' : ' + str(round(confs[1], 3)), ",\n")
+
             # Get our "SKIP_RABBIT" environment variable with a default value of
             # false
             skip_rabbit = os.getenv("SKIP_RABBIT", "False")
