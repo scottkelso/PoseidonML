@@ -9,13 +9,20 @@ python:
   - "3.5"
 install:
   - pip install codecov
+<<<<<<< HEAD
+=======
 env:
   - PYTHONPATH=/home/travis/build/$TRAVIS_REPO_SLUG/utils:$PYTHONPATH PYTHONPATH=/home/travis/build/$TRAVIS_REPO_SLUG/DeviceClassifier:$PYTHONPATH
+>>>>>>> upstream/master
 jobs:
   include:
   - stage: test
     script: docker build -f Dockerfile.base .
+<<<<<<< HEAD
+  - script: python3 setup.py install
+=======
   - script: find . -name requirements.txt -type f -exec pip3 install -r {} \; && pip3 uninstall -y poseidonml && pip3 install . && pytest -l -s -v --cov=tests/ --cov=utils/ --cov=DeviceClassifier/ --cov-report term-missing -c .coveragerc
+>>>>>>> upstream/master
 before_install:
   - sudo apt-get update
   - sudo apt-get install docker-ce

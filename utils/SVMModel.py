@@ -1,17 +1,17 @@
 import numpy as np
 import pickle as pickle
-from .reader import sessionizer
-from .featurizer import extract_features
+from poseidonml.reader import sessionizer
+from poseidonml.featurizer import extract_features
 
 from sklearn.model_selection import train_test_split
-from sklearn.neural_network import MLPClassifier
+from sklearn.svm import SVC
 from sklearn.metrics import f1_score
 
-from .training_utils import read_data
-from .training_utils import select_features
+from poseidonml.training_utils import read_data
+from poseidonml.training_utils import select_features
 
 
-class OneLayerModel:
+class SVMModel:
     def __init__(self, duration, hidden_size=None, labels=None):
         '''
         Initializes a model with a single hidden layer.  Features are
@@ -107,6 +107,11 @@ class OneLayerModel:
         full_features /= np.expand_dims(self.stds, 0)
         features = full_features[:, self.feature_list]
 
+        '''
+        last_packet = list(binned_sessions[-1].items())[-1]
+        timestamp = last_packet[1][0][0]
+        '''
+
         return features, source_ip, timestamps, other_ips
 
 
@@ -168,10 +173,11 @@ class OneLayerModel:
 
         # Fit the one layer model to the augmented training data
         X_input = X_aug[:, self.feature_list]
-        self.model = MLPClassifier(
-                                    (self.hidden_size),
-                                    alpha=0.1,
-                                    activation='relu',
+        self.model = SVC(
+                                    kernel='rbf', #default
+                                    degree=3, #default
+                                    decision_function_shape='ovr', #default
+                                    probability=True,
                                     max_iter=1000
                                   )
 
@@ -230,21 +236,13 @@ class OneLayerModel:
         if features is None:
             return None, None, None, None, None
 
-        L1_weights = self.model.coefs_[0]
-        L1_biases = self.model.intercepts_[0]
-        representation = np.maximum(
-                                     np.matmul(features, L1_weights)+L1_biases,
-                                     0
-                                   )
+        representation = features
 
         mean_rep = np.mean(representation, axis=0)
 
-        L2_weights = self.model.coefs_[1]
-        L2_biases = self.model.intercepts_[1]
-        probabilities = np.matmul(representation, L2_weights) + L2_biases
-        probabilities = np.exp(probabilities)
-        probabilities /= np.expand_dims(np.sum(probabilities, axis=1), axis=1)
-        probabilities = np.mean(probabilities, axis=0)
+
+        probabilities = self.model.predict_proba(mean_rep.reshape(1,-1))
+        probabilities = probabilities[0]
         prediction = [
                         (self.labels[i], prob)
                         for i, prob in enumerate(probabilities)
@@ -261,11 +259,9 @@ class OneLayerModel:
         '''
         Takes in a representation and produces a classification
         '''
-        L2_weights = self.model.coefs_[1]
-        L2_biases = self.model.intercepts_[1]
-        probabilities = np.matmul(representation, L2_weights) + L2_biases
-        probabilities = np.exp(probabilities)
-        probabilities /= np.sum(probabilities)
+        probabilities = self.model.predict_proba(representation.reshape(1, -1))
+        probabilities = probabilities[0]
+
         prediction = [
                         (self.labels[i], prob)
                         for i, prob in enumerate(probabilities)
@@ -284,7 +280,6 @@ class OneLayerModel:
 
         model_attributes = {
                             'duration': self.duration,
-                            'hidden_size': self.hidden_size,
                             'means': self.means,
                             'stds': self.stds,
                             'feature_list': self.feature_list,
@@ -307,7 +302,6 @@ class OneLayerModel:
             model_attributes = pickle.load(handle)
 
         self.duration = model_attributes['duration']
-        self.hidden_size = model_attributes['hidden_size']
         self.means = model_attributes['means']
         self.stds = model_attributes['stds']
         self.feature_list = model_attributes['feature_list']

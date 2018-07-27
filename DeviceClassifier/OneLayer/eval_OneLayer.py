@@ -18,7 +18,6 @@ from poseidonml.OneLayer import OneLayerModel
 from poseidonml.pcap_utils import is_private, clean_session_dict
 from poseidonml.eval_SoSModel import eval_pcap
 
-
 logging.basicConfig(level=logging.INFO)
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] ='3'
@@ -197,11 +196,6 @@ def update_data(
         model_hash: Hash of the model used to compute this information
     '''
     logger = logging.getLogger(__name__)
-    try:
-        if "LOG_LEVEL" in os.environ and os.environ['LOG_LEVEL'] != '':
-            logger.setLevel(os.environ['LOG_LEVEL'])
-    except Exception as e:
-        print("Unable to set logging level because: {0} defaulting to INFO.".format(str(e)))
 
     try:
         r = StrictRedis(host='redis', port=6379, db=0)
@@ -316,11 +310,6 @@ def basic_decision(
 
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
-    try:
-        if "LOG_LEVEL" in os.environ and os.environ['LOG_LEVEL'] != '':
-            logger.setLevel(os.environ['LOG_LEVEL'])
-    except Exception as e:
-        print("Unable to set logging level because: {0} defaulting to INFO.".format(str(e)))
 
     # Get time constant from config
     try:
@@ -355,7 +344,7 @@ if __name__ == '__main__':
         else:
             source_ip = None
     except Exception as e:
-        logger.debug("Could not get address info because %s", str(e))
+        logger.debug("Could not get address info beacuse %s", str(e))
         logger.debug("Defaulting to inferring IP address from %s", pcap_path)
         source_ip = None
         key_address = None
@@ -461,14 +450,6 @@ if __name__ == '__main__':
                 logger.info(labels[i] + ' : ' + str(round(confs[i],3)))
             # Get json message
             message = json.dumps(decision)
-
-            fileDir = "/tmp/poseidon/deviceList.txt"
-            try:
-                file = open(fileDir, 'r')
-            except IOError:
-                file = open(fileDir, 'w')
-
-            file.write(labels[1] + ' : ' + str(round(confs[1], 3)), ",\n")
 
             # Get our "SKIP_RABBIT" environment variable with a default value of
             # false

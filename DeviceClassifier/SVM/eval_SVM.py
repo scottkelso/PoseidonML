@@ -14,14 +14,25 @@ import numpy as np
 import tensorflow as tf
 
 from redis import StrictRedis
-from poseidonml.RandomForestModel import RandomForestModel
-from poseidonml.pcap_utils import is_private, clean_session_dict
+from poseidonml.SVMModel import SVMModel
+from poseidonml.pcap_utils import is_private, clean_session_dict, create_inputs
+from poseidonml.reader import sessionizer
 from poseidonml.eval_SoSModel import eval_pcap
 
 logging.basicConfig(level=logging.INFO)
 tf.logging.set_verbosity(tf.logging.ERROR)
 os.environ['TF_CPP_MIN_LOG_LEVEL'] ='3'
 
+# Get time constant from config
+with open('opts/config.json') as config_file:
+    config = json.load(config_file)
+    time_const = config['time constant']
+    state_size = config['state size']
+    duration = config['duration']
+    look_time = config['look time']
+    threshold = config['threshold']
+    batch_size = config['batch size']
+    rnn_size = config['rnn size']
 
 def lookup_key(key):
     '''
@@ -30,7 +41,7 @@ def lookup_key(key):
     try:
         r = StrictRedis(host='redis', port=6379, db=0)
         key_info = r.hgetall(key)
-        endpoint = key_info[b'endpoint']
+        endpoint = key_info[b'endpoint_data'] #Could also be key_info[b'endpoint']
         endpoint = endpoint.decode('utf-8')
         end_dict = ast.literal_eval(endpoint)
         address = end_dict['ip-address']
@@ -40,7 +51,7 @@ def lookup_key(key):
 
     return address, None
 
-def get_address_info(address, timestamp, state_size):
+def get_address_info(address, timestamp):
     '''
     Look up address information prior to the timestamp
     '''
@@ -132,7 +143,6 @@ def get_previous_state(source_ip, timestamp):
 def average_representation(
                             representations,
                             timestamps,
-                            time_const,
                             prev_representation=None,
                             last_update=None,
                           ):
@@ -181,8 +191,7 @@ def update_data(
                  timestamps,
                  predictions,
                  other_ips,
-                 model_hash,
-                 time_const
+                 model_hash
                ):
     '''
     Updates the stored data with the new information
@@ -205,13 +214,12 @@ def update_data(
     last_update, prev_rep = get_previous_state(source_ip, timestamps[0])
 
     # Compute current representation
-    time, current_rep = average_representation(representations, timestamps, time_const)
+    time, current_rep = average_representation(representations, timestamps)
 
     # Compute moving average representation
     time, avg_rep = average_representation(
                                             representations,
                                             timestamps,
-                                            time_const,
                                             prev_representation=prev_rep,
                                             last_update=last_update
                                           )
@@ -269,9 +277,7 @@ def basic_decision(
                     timestamp,
                     labels,
                     confs,
-                    abnormality,
-                    look_time,
-                    threshold
+                    abnormality
                   ):
 
     valid = True
@@ -311,22 +317,6 @@ def basic_decision(
 if __name__ == '__main__':
     logger = logging.getLogger(__name__)
 
-    # Get time constant from config
-    try:
-        with open('opts/config.json') as config_file:
-            config = json.load(config_file)
-            time_const = config['time constant']
-            state_size = config['state size']
-            duration = config['duration']
-            look_time = config['look time']
-            threshold = config['threshold']
-            batch_size = config['batch size']
-            conf_labels = config['labels']
-            rnn_size = config['rnn size']
-    except Exception as e:  # pragma: no cover
-        logger.error("unable to read 'opts/config.json' properly because: %s", str(e))
-        sys.exit(1)
-
     # path to the pcap to get the update from
     if len(sys.argv) < 2:
         pcap_path = "/pcaps/eval.pcap"
@@ -344,7 +334,7 @@ if __name__ == '__main__':
         else:
             source_ip = None
     except Exception as e:
-        logger.debug("Could not get address info beacuse %s", str(e))
+        logger.debug("Could not get address info beacuse %s", e)
         logger.debug("Defaulting to inferring IP address from %s", pcap_path)
         source_ip = None
         key_address = None
@@ -358,13 +348,13 @@ if __name__ == '__main__':
         if len(sys.argv) > 2:
             load_path = sys.argv[2]
         else:
-            load_path = '/models/RandomForestModel.pkl'
+            load_path = '/models/SVMModel.pkl'
 
         # Compute model hash
         with open(load_path, 'rb') as handle:
             model_hash = hashlib.md5(handle.read()).hexdigest()
 
-        model = RandomForestModel(duration=None)
+        model = SVMModel(duration=None, hidden_size=None)
         model.load(load_path)
         logger.debug("Loaded model from %s", load_path)
 
@@ -374,14 +364,14 @@ if __name__ == '__main__':
                                                            source_ip=source_ip,
                                                            mean=False
                                                                              )
-
         if preds is not None:
+
             logger.debug("Generating predictions")
             last_update, prev_rep = get_previous_state(source_ip, timestamps[0])
+
             _, mean_rep = average_representation(
                                                     reps,
                                                     timestamps,
-                                                    time_const,
                                                     prev_representation=prev_rep,
                                                     last_update=last_update
                                                 )
@@ -399,8 +389,7 @@ if __name__ == '__main__':
                                                     timestamps,
                                                     preds,
                                                     others,
-                                                    model_hash,
-                                                    time_const
+                                                    model_hash
                                                    )
 
             # Get the sessions that the model looked at
@@ -413,7 +402,7 @@ if __name__ == '__main__':
                             clean_session_dict(
                                                 session_dict,
                                                 source_address=source_ip
-                                              )
+                                               )
                 clean_sessions.append(cleaned_sessions)
 
             if source_ip is None:
@@ -423,17 +412,14 @@ if __name__ == '__main__':
             decisions = {}
             timestamp = timestamps[0].timestamp()
             labels, confs = zip(*preds)
-
             if os.environ.get('POSEIDON_PUBLIC_SESSIONS'):
                 logger.debug("Bypassing abnormality detection")
                 abnormality = 0
             else:
-                abnormality = eval_pcap(pcap_path, conf_labels, time_const, label=labels[0], rnn_size=rnn_size)
-
+                abnormality = eval_pcap(pcap_path, label=labels[0])
             repr_s, m_repr_s, _ , prev_s, _, _ = get_address_info(
                                                                    source_ip,
-                                                                   timestamp,
-                                                                   state_size
+                                                                   timestamp
                                                                  )
             decision = basic_decision(
                                        key,
@@ -442,9 +428,7 @@ if __name__ == '__main__':
                                        timestamp,
                                        labels,
                                        confs,
-                                       abnormality,
-                                       look_time,
-                                       threshold
+                                       abnormality
                                      )
             logger.debug("Created message")
             for i in range(3):
@@ -460,6 +444,7 @@ if __name__ == '__main__':
             skip_rabbit = skip_rabbit.lower() in ["true", "t", "y", "1"]
 
             logger.debug("SKIP_RABBIT set to: %s", str(skip_rabbit))
+            logger.info("Message: " + message)
 
             if not skip_rabbit:
                 # Rabbit settings
@@ -483,6 +468,5 @@ if __name__ == '__main__':
                 logger.debug("Routing key: " + routing_key)
                 logger.debug("Exchange: " + exchange)
                 connection.close()
-            else:
-                # Skipping rabbit. Printing to STDOUT
-                logger.info("Message: " + message)
+        else:
+            logger.info("Not enough sessions in pcap")

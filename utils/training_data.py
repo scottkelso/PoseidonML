@@ -7,18 +7,25 @@ condition on
 
 import sys
 import os
+import json
 import logging
 import pickle
 
 import numpy as np
 from .RandomForestModel import RandomForestModel
+from .pcap_utils import clean_session_dict
 from .pcap_utils import get_source
-from .pcap_utils import featurize_session
 
 logging.basicConfig(level=logging.INFO)
 
+# Get model info from config
+with open('opts/config.json') as config_file:
+    config = json.load(config_file)
+    state_size = config['state size']
+    duration = config['duration']
+    time_const = config['time constant']
 
-def average_representation(rep, timestamp, prev_rep, prev_time, time_const):
+def average_representation(rep, timestamp, prev_rep, prev_time):
     """
     Computes the new moving average representation from a single input
     """
@@ -36,27 +43,18 @@ def average_representation(rep, timestamp, prev_rep, prev_time, time_const):
 
 def create_dataset(
                     data_dir,
-                    time_const,
-                    model_path='/models/OneLayerModel.pkl',
-                    label=None
+                    model_path='/models/OneLayerModel.pkl'
                   ):
     logger = logging.getLogger(__name__)
 
     # Load the model
-    logger.debug("Loading model")
+    logger.info("Loading model")
     model = RandomForestModel(duration=None, hidden_size=None)
     model.load(model_path)
 
     # Get all the pcaps in the training directory
-    logger.debug("Getting pcaps")
+    logger.info("Getting pcaps")
     pcaps = []
-    try:
-        name, ext = os.path.splitext(data_dir)
-        if ext == '.pcap':
-            pcaps.append(data_dir)
-    except:
-        pass
-
     for dirpath, dirnames, filenames in os.walk(data_dir):
         for filename in filenames:
             name, ext = os.path.splitext(filename)
@@ -67,7 +65,7 @@ def create_dataset(
     # Representations will be computed separately for each pcap
     representations = {}
     for pcap in pcaps:
-        logger.debug("Working on %s", pcap)
+        logger.info("Working on %s", pcap)
         reps, _, timestamps, _, _ = model.get_representation(
                                                             pcap,
                                                             mean=False
@@ -87,14 +85,9 @@ def create_dataset(
                                                        rep,
                                                        timestamp,
                                                        prev_rep,
-                                                       prev_time,
-                                                       time_const
+                                                       prev_time
                                                       )
                 preds = model.classify_representation(new_rep)
-                if label is not None:
-                    preds = [(p[0],0) for p in preds if p[0] != label]
-                    preds.append((label,1))
-
                 model_outputs[timestamp] = {
                                             "classification": list(preds),
                                             "representation": list(rep),
@@ -104,11 +97,11 @@ def create_dataset(
 
         # Clean the sessions and merge them into a single session dict
         session_rep_pairs = []
-        source = get_source(sessions, address_type='IP')
         for session_dict in sessions:
-            for key, value in session_dict.items():
-                session_info = featurize_session(key, value, source=source)
-
+            clean_dict, _ = clean_session_dict(session_dict, source_address)
+            # Go through the sessions and pair them with a representation that
+            # preceeds them by as little as possible
+            for key, value in clean_dict.items():
                 first_time = value[0][0].timestamp()
                 prior_time = None
                 for timestamp in timestamps:
@@ -117,18 +110,16 @@ def create_dataset(
                         prior_time = timestamp
                 if prior_time == None:
                     prior_time = timestamps[0]
-
                 pair = {
                         "model outputs": model_outputs[prior_time],
-                        "session info": session_info,
+                        "packets": clean_dict[key],
                         "key": key
                        }
-                if session_info is not None:
-                    session_rep_pairs.append(pair)
+                session_rep_pairs.append(pair)
 
         representations[pcap] = session_rep_pairs
     byte_size = sys.getsizeof(pickle.dumps(representations))
-    logger.debug(
+    logger.info(
                 "created training data of size %f mb",
                 round(byte_size/1000000, 3)
                )

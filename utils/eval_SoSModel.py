@@ -1,33 +1,21 @@
+import os
+import sys
 import json
 import logging
 import numpy as np
-import os
-import sys
 import tensorflow as tf
 from pkg_resources import working_set
 from pkg_resources import Requirement
-try:
-    from .SoSmodel import SoSModel
-    from .session_sequence import create_dataset
-    from .session_iterator import BatchIterator
-except SystemError:
-    from SoSmodel import SoSModel
-    from session_sequence import create_dataset
-    from session_iterator import BatchIterator
-
+from .SoSmodel import SoSModel
+from .session_sequence import create_dataset
+from .session_iterator import BatchIterator
 
 logging.basicConfig(level=logging.INFO)
 tf.logging.set_verbosity(tf.logging.ERROR)
-os.environ['TF_CPP_MIN_LOG_LEVEL'] ='3'
 
 
 def eval_pcap(pcap, labels, time_const, label=None, rnn_size=100):
     logger = logging.getLogger(__name__)
-    try:
-        if "LOG_LEVEL" in os.environ and os.environ['LOG_LEVEL'] != '':
-            logger.setLevel(os.environ['LOG_LEVEL'])
-    except Exception as e:
-        print("Unable to set logging level because: {0} defaulting to INFO.".format(str(e)))
     data = create_dataset(pcap, time_const, label=label)
     # Create an iterator
     iterator = BatchIterator(
@@ -36,7 +24,7 @@ def eval_pcap(pcap, labels, time_const, label=None, rnn_size=100):
                              perturb_types=['random data']
                             )
     logger.debug("Created iterator")
-    rnnmodel = SoSModel(rnn_size=rnn_size, label_size=len(labels))
+    rnnmodel = SoSModel(rnn_size=rnn_size)
     logger.debug("Created model")
     rnnmodel.load(os.path.join(working_set.find(Requirement.parse('poseidonml')).location, 'poseidonml/models/SoSmodel'))
     logger.debug("Loaded model")
